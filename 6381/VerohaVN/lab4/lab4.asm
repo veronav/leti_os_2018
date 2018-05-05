@@ -17,7 +17,23 @@ INTERRUPTION PROC FAR
 	INTERRUPTION_SET dw 0FEDCh                 ;offset - 11
 	INT_COUNT db 'Interrupts call count: 0000  $' ;offset - 13
 
+	
+	INT_STACK		DW 	100 dup (?) 
+	KEEP_SS DW 0 
+	KEEP_AX	DW 	? 
+	KEEP_SP DW 0 
+	
+	
 FUNC_FOR_START:
+
+	mov KEEP_SS, ss 
+	mov KEEP_SP, sp 
+	mov KEEP_AX, ax 
+	mov ax,seg INT_STACK 
+	mov ss,ax 
+	mov sp,0 
+	mov ax,KEEP_AX
+	
 	push ax      
 	push bx
 	push cx
@@ -102,6 +118,11 @@ END_CALC:
 	pop bx
 	pop ax     
 
+	mov 	ax,KEEP_SS
+ 	mov 	ss,ax
+ 	mov 	ax,KEEP_AX
+ 	mov 	sp,KEEP_SP
+	
 	iret
 INTERRUPTION ENDP
 ;------------------------------------
