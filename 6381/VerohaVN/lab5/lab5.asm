@@ -33,6 +33,11 @@ L5_DATA SEGMENT
 
         CHR_EOT = '$'
         INF_CLR = 0Fh
+		
+		INT_STACK		DW 	100 dup (?)
+		KEEP_SS DW 0
+		KEEP_AX	DW 	?
+		KEEP_SP DW 0
       
 L5_DATA ENDS
 
@@ -40,8 +45,6 @@ L5_STACK SEGMENT STACK
         db STK_SIZ * 10h dup (?)
 L5_STACK ENDS
 
-;Ghjwtlehs
-;__________________________________________
 
 TETR_TO_HEX PROC NEAR
                 and     AL, 0Fh
@@ -218,6 +221,14 @@ PR_STR_BIOS ENDP
 ;Обработчик прерывания 
 
 INT_09H_PRO PROC FAR
+				mov KEEP_SS, SS 
+				mov KEEP_SP, SP 
+				mov KEEP_AX, AX 
+				mov AX,seg INT_STACK 
+				mov SS,AX 
+				mov SP,0 
+				mov AX,KEEP_AX
+				
                 push    AX
                 push    BX
                 push    CX
@@ -289,6 +300,12 @@ int_quit:       mov     AL, 20h
                 pop     CX
                 pop     BX
                 pop     AX
+				
+				mov 	AX,KEEP_SS
+				mov 	SS,AX
+				mov 	AX,KEEP_AX
+				mov 	SP,KEEP_SP
+				
                 iret
 INT_09H_PRO ENDP
 
