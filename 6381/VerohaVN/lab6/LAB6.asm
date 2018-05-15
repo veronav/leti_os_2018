@@ -1,345 +1,249 @@
-.SEQ    
+CODE SEGMENT
+ ASSUME CS:CODE, DS:DATA, ES:DATA, SS:STACKSEG
+START: JMP BEGIN
+;---------------------------------------
+; Вызывает прерывание, печатающее строку.
+PRINT PROC near
+	push ax
+	mov AH,09h
+	int 21h
+	pop ax
+	ret
+PRINT ENDP
 
-L6_CODE SEGMENT
-        ASSUME CS: L6_CODE, DS: L6_DATA, ES: NOTHING, SS: L6_STACK
-
-START:  jmp l6_start
-
-
-L6_DATA SEGMENT
-
-        PSP_SIZ = 10h                 
-        STK_SIZ = 10h                  
-
-        MEM_ERR db 'Error functions 4AH interruptions 21H, error code:     H.',       0Dh, 0Ah, '$'
-
-        EXE_E01 db 'Start error, code 0001H: Wrong number subfunctions.',              0Dh, 0Ah, '$'
-        EXE_E02 db 'Start error, code 0002H: Specified file is not found.',            0Dh, 0Ah, '$'
-        EXE_E03 db 'Start error, code 0003H: Specified path does not exist.',          0Dh, 0Ah, '$'
-        EXE_E04 db 'Start error, code 0004H: Openly there are too much files.',        0Dh, 0Ah, '$'
-        EXE_E05 db 'Start error, code 0005H: File access error.',                      0Dh, 0Ah, '$'
-        EXE_E08 db 'Start error, code 0008H: Not enough free memory.',                 0Dh, 0Ah, '$'
-        EXE_E0A db 'Start error, code 000AH: Environment block larger than 32 KB.',    0Dh, 0Ah, '$'
-        EXE_E0B db 'Start error, code 000BH: Incorrect file format.',                  0Dh, 0Ah, '$'
-        EXE_EUN db 'Start error, code     H: < Unknown error code >',                  0Dh, 0Ah, '$'
-
-        TRM_C00 db ' Reason of completion 00H: Normal completion, code:    H.',  0Dh, 0Ah, '$'
-        TRM_C01 db 'Reason of completion 01H: Completion with Ctrl-Break.',      0Dh, 0Ah, '$'
-        TRM_C02 db 'Reason of completion 02H: Critical device error.',           0Dh, 0Ah, '$'
-        TRM_C03 db 'Reason of completion 03H: Resident completion on 31H.',      0Dh, 0Ah, '$'
-        TRM_CUN db 'Reason of completion   H: < Unknown point >, code:   H.',    0Dh, 0Ah, '$'
-
-        ENV_SAD dw 00h                  
-        CMLN_IP dw offset CMD_LIN      
-        CMLN_CS dw seg CMD_LIN         
-        FCB1_CI dd 00h                 
-        FCB2_CI dd 00h                
-
-        ABS_NAM db 100h dup (?)        
-        PR_NAME db 'LAB2.COM', 00h  ; 
-        CMD_LIN db 0Ch, ' -safe /help'  
-
-        KEEP_SS dw ?                    
-        KEEP_SP dw ?                    
-
-        CHR_EOT = '$'
-        INF_CLR = 0Fh
-	ERR_CLR = 0Ch
-	MSG_CLR = 0Ah
-
-L6_DATA ENDS
-
-L6_STACK SEGMENT STACK
-        db STK_SIZ * 10h dup (?)
-L6_STACK ENDS
-
-;Процедуры
-;__________________________________________
-
-TETR_TO_HEX PROC NEAR
-                and     AL, 0Fh
-                cmp     AL, 09h
-                jbe     NEXT
-                add     AL, 07h
-NEXT:           add     AL, 30h
-                ret
+TETR_TO_HEX PROC near
+	and AL,0Fh
+	cmp AL,09
+	jbe NEXT
+	add AL,07
+NEXT: add AL,30h
+	ret
 TETR_TO_HEX ENDP
 
-;перевод байта из AL в два символа HEX
-
-BYTE_TO_HEX PROC NEAR
-                push    CX
-                mov     AH, AL
-                call    TETR_TO_HEX
-                xchg    AL, AH
-                mov     CL, 04h
-                shr     AL, CL
-                call    TETR_TO_HEX     
-                pop     CX              
-                ret
+BYTE_TO_HEX PROC near
+	push CX
+	mov AH,AL
+	call TETR_TO_HEX
+	xchg AL,AH
+	mov CL,4
+	shr AL,CL
+	call TETR_TO_HEX 
+	pop CX 
+	ret
 BYTE_TO_HEX ENDP
 
-;перевод в HEX слова из AX
+; Функция освобождения лишней памяти
+CLEARMEMORY PROC
+	; Вычисляем в BX необходимое количество памяти для этой программы в параграфах
+		mov ax,STACKSEG ; В ax сегментный адрес стека
+		mov bx,es
+		sub ax,bx ; Вычитаем сегментный адрес PSP
+		add ax,10h ; Прибавляем размер стека в параграфах
+		mov bx,ax
+	; Пробуем освободить лишнюю память
+		mov ah,4Ah
+		int 21h
+		jnc CLEARMEMORY_SUCCESS
+	
+	; Обработка ошибок
+		mov dx,offset ERR_CLEARMEMORY
+		call PRINT
+		cmp ax,7
+		mov dx,offset ERR_MCB_DESTROYED
+		je CLEARMEMORY_PRINT
+		cmp ax,8
+		mov dx,offset ERR_FEW
+		je CLEARMEMORY_PRINT
+		cmp ax,9
+		mov dx,offset ERR_WRONG_ADDR
+		
+		CLEARMEMORY_PRINT:
+		call PRINT
+		mov dx,offset STRENDL
+		call PRINT
+	
+	; Выход в DOS
+		xor AL,AL
+		mov AH,4Ch
+		int 21H
+	
+	CLEARMEMORY_SUCCESS:
+	ret
+CLEARMEMORY ENDP
 
-WRD_TO_HEX PROC NEAR
-                push    AX
-                push    BX
-                push    DI
-                mov     BH, AH
-                call    BYTE_TO_HEX
-                mov     DS:[DI], AH
-                dec     DI
-                mov     DS:[DI], AL
-                dec     DI
-                mov     AL, BH
-                call    BYTE_TO_HEX
-                mov     DS:[DI], AH
-                dec     DI
-                mov     DS:[DI], AL
-                pop     DI
-                pop     BX
-                pop     AX
-                ret
-WRD_TO_HEX ENDP
+; Функция создания блока параметров
+PARAMETERS_BLOCK PROC
+	mov ax, es:[2Ch]
+	mov PARAMETERSBLOCK,ax ; Кладём сегментный адрес среды
+	mov PARAMETERSBLOCK+2,es ; Сегментный адрес параметров командной строки(PSP)
+	mov PARAMETERSBLOCK+4,80h ; Смещение параметров командной строки
+	ret
+PARAMETERS_BLOCK ENDP
 
-;вывод текста
+; Функция запуска дочернего процесса
+CHILD_PROCESS PROC
+	mov dx,offset STRENDL
+	call PRINT
+	; Устанавливаем DS:DX на имя вызываемой программы
+		
+		mov dx,offset STD_CHILD_PATH
+		; Смотрим, есть ли хвост
+		xor ch,ch
+		mov cl,es:[80h]
+		cmp cx,0
+		je CHILD_PROCESS_NO_TAIL ; Если нет хвоста, то используем стандартное имя вызываемой программы
+		mov si,cx ; si - номер копируемого символа
+		push si ; Сохраняем кол-во символов
+		CHILD_PROCESS_CYCLE:
+			mov al,es:[81h+si]
+			mov [offset CHILD_PATH+si-1],al			
+			dec si
+		loop CHILD_PROCESS_CYCLE
+		pop si
+		mov [CHILD_PATH+si-1],0 ; Кладём в конец 0
+		mov dx,offset CHILD_PATH ; Хвост есть, используем его
+		CHILD_PROCESS_NO_TAIL:
+		
+	; Устанавливаем ES:BX на блок параметров
+		push ds
+		pop es
+		mov bx,offset PARAMETERSBLOCK
 
-PR_STR_BIOS PROC NEAR
-                push    AX
-                push    BX
-                push    CX
-                push    DX
-                push    DI
-                push    ES
-                mov     AX, DS
-                mov     ES, AX
-                mov     AH, 0Fh         
-                int     10h             
-                mov     AH, 03h         
-                int     10h             
-                mov     DI, 00h         
-dsbp_nxt:       cmp     byte ptr DS:[BP+DI], CHR_EOT 
-                je      dsbp_out        
-                inc     DI              
-                jmp     dsbp_nxt
-dsbp_out:       mov     CX, DI          
-                mov     AH, 13h         
-                mov     AL, 01h         
-                int     10h
-                pop     ES
-                pop     DI
-                pop     DX
-                pop     CX
-                pop     BX
-                pop     AX
-                ret
-PR_STR_BIOS ENDP
+	; Сохраняем SS, SP
+		mov KEEP_SP, SP
+		mov KEEP_SS, SS
+	
+	; Вызываем загрузчик:
+		mov ax,4b00h
+		int 21h
+		jnc CHILD_PROCESS_SUCCESS
+	
+	; Восстанавливаем DS, SS, SP
+		push ax
+		mov ax,DATA
+		mov ds,ax
+		pop ax
+		mov SS,KEEP_SS
+		mov SP,KEEP_SP
+	
+	; Обрабатываем ошибки:
+		cmp ax,1
+		mov dx,offset ERR_WRONG_FUNCNUM
+		je CHILD_PROCESS_PRINT
+		cmp ax,2
+		mov dx,offset ERR_FILE_NOT_FOUND
+		je CHILD_PROCESS_PRINT
+		cmp ax,5
+		mov dx,offset ERR_DISK
+		je CHILD_PROCESS_PRINT
+		cmp ax,8
+		mov dx,offset ERR_FEW2
+		je CHILD_PROCESS_PRINT
+		cmp ax,10
+		mov dx,offset ERR_WRONG_ENVIRON_STR
+		je CHILD_PROCESS_PRINT
+		cmp ax,11
+		mov dx,offset ERR_WRONG_FORMAT
+		CHILD_PROCESS_PRINT:
+		call PRINT
+		mov dx,offset STRENDL
+		call PRINT
+	
+	; Выходим в DOS
+		xor AL,AL
+		mov AH,4Ch
+		int 21H
+		
+	CHILD_PROCESS_SUCCESS:
+	mov dx,offset STRENDL
+	call PRINT
+	mov ax,4d00h
+	int 21h
+	; Вывод причины завершения
+		cmp ah,0
+		mov dx,offset NORMAL_COMPLETION
+		je CHILD_PROCESS_PRINT_REASON
+		cmp ah,1
+		mov dx,offset CTRL_BREAK
+		je CHILD_PROCESS_PRINT_REASON
+		cmp ah,2
+		mov dx,offset DEVICE_ERROR
+		je CHILD_PROCESS_PRINT_REASON
+		cmp ah,3
+		mov dx,offset RESIDENT_END
+		CHILD_PROCESS_PRINT_REASON:
+		call PRINT
+		mov dx,offset STRENDL
+		call PRINT
 
-;__________________________________________
+	; Вывод кода завершения:
+		mov dx,offset END_CODE
+		call PRINT
+		call BYTE_TO_HEX
+		push ax
+		mov ah,02h
+		mov dl,al
+		int 21h
+		pop ax
+		xchg ah,al
+		mov ah,02h
+		mov dl,al
+		int 21h
+		mov dx,offset STRENDL
+		call PRINT
 
-;Начало работы программы
+	ret
+CHILD_PROCESS ENDP
 
-;Освобождение неиспользуемой памяти
+BEGIN:
+	mov ax,data
+	mov ds,ax
+	
+	call CLEARMEMORY
+	call PARAMETERS_BLOCK
+	call CHILD_PROCESS
+	
+	xor AL,AL
+	mov AH,4Ch
+	int 21H
+CODE ENDS
 
+DATA SEGMENT
+	; Строки ошибок:
+	ERR_CLEARMEMORY	 	db 'Error with clear memory: $'
+	ERR_MCB_DESTROYED 	db 'MCB is destroyed$'
+	ERR_FEW 			db 'Not enough memory$'
+	ERR_WRONG_ADDR 		db 'Wrong addres$'
+		
+	; Ошибки от загрузчика OS
+	ERR_WRONG_FUNCNUM		db 'Function number is wrong$'
+	ERR_FILE_NOT_FOUND		db 'File is not found$'
+	ERR_DISK				db 'Disk error$'
+	ERR_FEW2				db 'Not enough memory$'
+	ERR_WRONG_ENVIRON_STR	db 'Wrong environment string$'
+	ERR_WRONG_FORMAT		db 'Wrong format$'
+	; Строки, содержащие причины завершения дочерней программы
+	NORMAL_COMPLETION	db 'Normal completion$'
+	CTRL_BREAK			db 'End Ctrl-Break$'
+	DEVICE_ERROR		db 'End device error$'
+	RESIDENT_END		db 'End 31h function$'
+	END_CODE			db 'End code: $'
 
-l6_start:       mov     BX, L6_DATA     
-                mov     DS, BX          
-                mov     BX, L6_STACK    
-                add     BX, STK_SIZ     
-                sub     BX, L6_CODE     
-                add     BX, PSP_SIZ     
-                mov     AH, 4Ah         
-                int     21h             
-                jc      error_4A        
-                jmp     prep_nam
+	STRENDL db 0DH,0AH,'$'
+	; Блок параметров. Перед загрузкой дочерней программы на него должен указывать ES:BX
+	PARAMETERSBLOCK 	dw 0 ; Сегментный адрес среды
+						dd ? ; Сегментный адрес и смещение параметров командной строки
+						dd 0 ; Сегмент и смещение первого FCB
+						dd 0 ; Второго
+	
+	CHILD_PATH  	db 50h dup ('$')
+	STD_CHILD_PATH	db 'L2.EXE',0
+	; Переменные для хранения SS, SP
+	KEEP_SS dw 0
+	KEEP_SP dw 0
+DATA ENDS
 
-; вывод информации об ошибке
-
-error_4A:       lea     DI, MEM_ERR     
-                add     DI, 50          
-                call    WRD_TO_HEX
-                mov     BL, ERR_CLR     
-                lea     BP, MEM_ERR
-                call    PR_STR_BIOS
-                jmp     dos_quit
-
-;подготовка абсолютного имени файла
-
-prep_nam:       push    ES              
-                mov     ES, ES:[2Ch]    
-                xor     SI, SI          
-prep_eel:       cmp     word ptr ES:[SI], 0000h 
-                je      prep_lsi        
-                inc     SI              
-                jmp     prep_eel        
-prep_lsi:       add     SI, 04h         
-                mov     DI, SI          
-                xor     AX, AX          
-prep_lsl:       cmp     byte ptr ES:[DI], 00h   
-                je      prep_cpi        
-                cmp     byte ptr ES:[DI], "/"   
-                je      prep_sls        
-                cmp     byte ptr ES:[DI], "\"   
-                je      prep_sls        
-                jmp     prep_lsn        
-prep_sls:       mov     AX, DI          
-prep_lsn:       inc     DI              
-                jmp     prep_lsl
-prep_cpi:       lea     DI, ABS_NAM     
-prep_cpl:       cmp     SI, AX          
-                ja      prep_cni        
-                mov     BL, ES:[SI]     
-                mov     DS:[DI], BL     
-                inc     SI              
-                inc     DI              
-                jmp     prep_cpl
-prep_cni:       pop     ES              
-                lea     SI, PR_NAME     
-prep_cnl:       cmp     byte ptr DS:[SI], 00h   
-                je      prep_pbs        
-                mov     BL, DS:[SI]     
-                mov     DS:[DI], BL     
-                inc     SI              
-                inc     DI              
-                jmp     prep_cnl
-
-; подготовка блоков параметров и стека
-
-prep_pbs:       push    ES              
-                mov     BX, seg ENV_SAD
-                mov     ES, BX          
-                lea     BX, ENV_SAD     
-                mov     DX, seg ABS_NAM
-                mov     DS, DX          
-                lea     DX, ABS_NAM     
-                mov     KEEP_SS, SS     
-                mov     KEEP_SP, SP     
-                jmp     exec_prg
-
-; запуск дочерней программы с помощью 4Bh
-
-exec_prg:       mov     AH, 4Bh         
-                mov     AL, 00h         
-                int     21h
-                mov     BX, L6_DATA
-                mov     DS, BX          
-                mov     SS, KEEP_SS     
-                mov     SP, KEEP_SP     
-                pop     ES              
-                jc      exec_e01        
-                jmp     term_cds
-exec_e01:       cmp     AX, 01h
-                jne     exec_e02
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_E01
-                call    PR_STR_BIOS
-                jmp     dos_quit
-exec_e02:       cmp     AX, 02h
-                jne     exec_e03
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_E02
-                call    PR_STR_BIOS
-                jmp     dos_quit
-exec_e03:       cmp     AX, 03h
-                jne     exec_e04
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_E03
-                call    PR_STR_BIOS
-                jmp     dos_quit
-exec_e04:       cmp     AX, 04h
-                jne     exec_e05
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_E04
-                call    PR_STR_BIOS
-                jmp     dos_quit
-exec_e05:       cmp     AX, 05h
-                jne     exec_e08
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_E05
-                call    PR_STR_BIOS
-                jmp     dos_quit
-exec_e08:       cmp     AX, 08h
-                jne     exec_e0A
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_E08
-                call    PR_STR_BIOS
-                jmp     dos_quit
-exec_e0A:       cmp     AX, 0Ah
-                jne     exec_e0B
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_E0A
-                call    PR_STR_BIOS
-                jmp     dos_quit
-exec_e0B:       cmp     AX, 0Bh
-                jne     exec_eun
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_E0B
-                call    PR_STR_BIOS
-                jmp     dos_quit
-exec_eun:       lea     DI, EXE_EUN     
-                add     DI, 23          
-                call    WRD_TO_HEX
-                mov     BL, ERR_CLR     
-                lea     BP, EXE_EUN
-                call    PR_STR_BIOS
-                jmp     dos_quit
-
-; обработка завершения дочерней программы
-
-term_cds:       mov     AH, 4Dh         
-                int     21h
-                cmp     AH, 00h
-                jne     term_c01
-                call    BYTE_TO_HEX
-   
-                lea     DI, TRM_C00
-                add     DI, 53         
-                mov     DS:[DI], AX
-                mov     BL, MSG_CLR     
-                lea     BP, TRM_C00
-                call    PR_STR_BIOS
-                jmp     dos_quit
-term_c01:       cmp     AH, 01h
-                jne     term_c02
-                mov     BL, MSG_CLR     
-                lea     BP, TRM_C01
-                call    PR_STR_BIOS
-                jmp     dos_quit
-term_c02:       cmp     AH, 02h
-                jne     term_c03
-                mov     BL, MSG_CLR     
-                lea     BP, TRM_C02
-                call    PR_STR_BIOS
-                jmp     dos_quit
-term_c03:       cmp     AH, 03h
-                jne     term_cun
-                mov     BL, MSG_CLR     
-                lea     BP, TRM_C03
-                call    PR_STR_BIOS
-                jmp     dos_quit                                                
-term_cun:       mov     BL, AH
-                call    BYTE_TO_HEX     
-                lea     DI, TRM_CUN
-                add     DI, 52          
-                mov     DS:[DI], AX
-                mov     AL, BL
-                call    BYTE_TO_HEX     
-                lea     DI, TRM_CUN
-                add     DI, 19          
-                mov     DS:[DI], AX
-                mov     BL, MSG_CLR     
-                lea     BP, TRM_CUN
-                call    PR_STR_BIOS
-                jmp     dos_quit
-
-;выход из программы
-
-dos_quit:       mov     AH, 01h
-                int     21h
-                mov     AH, 4Ch
-                int     21h
-
-L6_CODE ENDS
-END START
-
-
+STACKSEG SEGMENT STACK
+	dw 80h dup (?) ; 100h байт
+STACKSEG ENDS
+ END START
